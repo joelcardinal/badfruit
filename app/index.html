@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Bad Fruit</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+        <style>
+            body {
+                margin: 0px;
+                background-color: #000000;
+                overflow: hidden;
+            }
+            .show {
+            	display: block;
+            }
+            .hide {
+            	display: none;
+            }
+        </style>
+    </head>
+    <body>
+    <script src="js/three.min.js"></script>
+
+<script>
+	// establish namespace
+	game = 'game' in window ? game : {};
+</script>
+
+<script>
+// game.controllers
+(function(){
+
+game.controllersArr = [];
+
+function addGamepad(eventOrGamepad) {
+	var gamepad = eventOrGamepad.type && eventOrGamepad.type === 'gamepadconnected' ? eventOrGamepad.gamepad : eventOrGamepad;
+
+	// console.log('gamepad-added '+ gamepad.index);
+	// console.log(Object.keys(controllers).length + ' Players');
+
+	// abort we already have it
+	if(game.controllersArr.indexOf(gamepad.index) > -1){return}
+
+	game.controllersArr.push(gamepad.index);
+
+	// TODO: can be used to help start game?
+	var ev = new CustomEvent('gamepad-added', {detail: {data: 'data'}});
+	window.dispatchEvent(ev);
+	// window.addEventListener('gamepad-added', function(e){console.log(e);console.log(e.detail.data);});
+}
+
+function disconnectedGamepad(e) {
+	// console.log('GamePad ' + e.gamepad.index + ' Disconnected!');
+	var gamepadIndex = e.gamepad.index;
+
+	// abort doesn't exist
+	if(game.controllersArr.indexOf(gamepadIndex) === -1){return}
+
+	game.controllersArr = game.controllersArr.filter(function(v){return (v != gamepadIndex);})
+
+	// TODO: can be used to pause game?
+	var ev = new CustomEvent('gamepad-disconnect', {detail: {data: e}});
+	window.dispatchEvent(ev);
+	// window.addEventListener('gamepad-disconnect', function(e){console.log(e);console.log(e.detail.data);});
+}
+
+// In case any are already connected
+function scanGamepads() {
+	var gamepads = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads() : []);
+	for (var i = 0; i < gamepads.length; i++) {
+		if (gamepads[i]) {
+			addGamepad(gamepads[i]);
+		}
+	}
+}
+
+scanGamepads();
+window.addEventListener("gamepadconnected", addGamepad);
+window.addEventListener("gamepaddisconnected", disconnectedGamepad);
+
+})();
+</script>
+
+<script>
+// three
+(function(){
+	game.init = function(){
+		var camera, scene, renderer;
+		var mesh;
+
+		init();
+		animate();
+
+		function init() {
+
+			var AMOUNT = game.controllersArr.length;
+			var SIZE = 1 / AMOUNT;
+			var ASPECT_RATIO = window.innerWidth / window.innerHeight;
+
+			var cameras = [];
+
+			// TODO: will this work for odd numbers like 3?
+			//	Leave a hole instead of filling the available space?
+			for ( var y = 0; y < AMOUNT; y ++ ) {
+
+				for ( var x = 0; x < AMOUNT; x ++ ) {
+
+					var subcamera = new THREE.PerspectiveCamera( 40, ASPECT_RATIO, 0.1, 10 );
+					subcamera.bounds = new THREE.Vector4( x / AMOUNT, y / AMOUNT, SIZE, SIZE );
+					subcamera.position.x = ( x / AMOUNT ) - 0.5;
+					subcamera.position.y = 0.5 - ( y / AMOUNT );
+					subcamera.position.z = 1.5;
+					subcamera.position.multiplyScalar( 2 );
+					subcamera.lookAt( new THREE.Vector3() );
+					subcamera.updateMatrixWorld();
+					cameras.push( subcamera );
+
+				}
+
+			}
+
+			camera = new THREE.ArrayCamera( cameras );
+			camera.position.z = 3;
+
+			scene = new THREE.Scene();
+
+			scene.add( new THREE.AmbientLight( 0x222244 ) );
+
+			var light = new THREE.DirectionalLight();
+			light.position.set( 0.5, 0.5, 1 );
+			light.castShadow = true;
+			light.shadow.camera.zoom = 4; // tighter shadow map
+			scene.add( light );
+
+			var geometry = new THREE.PlaneBufferGeometry( 100, 100 );
+			var material = new THREE.MeshPhongMaterial( { color: 0x000066 } );
+
+			var background = new THREE.Mesh( geometry, material );
+			background.receiveShadow = true;
+			background.position.set( 0, 0, - 1 );
+			scene.add( background );
+
+			var geometry = new THREE.CylinderBufferGeometry( 0.5, 0.5, 1, 32 );
+			var material = new THREE.MeshPhongMaterial( { color: 0xff0000 } );
+
+			mesh = new THREE.Mesh( geometry, material );
+			mesh.castShadow = true;
+			mesh.receiveShadow = true;
+			scene.add( mesh );
+
+			renderer = new THREE.WebGLRenderer();
+			renderer.setPixelRatio( window.devicePixelRatio );
+			renderer.setSize( window.innerWidth, window.innerHeight );
+			renderer.shadowMap.enabled = true;
+			document.body.appendChild( renderer.domElement );
+
+			window.addEventListener( 'resize', onWindowResize, false );
+
+		}
+
+		function onWindowResize() {
+
+			camera.aspect = window.innerWidth / window.innerHeight;
+			camera.updateProjectionMatrix();
+
+			renderer.setSize( window.innerWidth, window.innerHeight );
+
+		}
+
+		function animate() {
+
+			mesh.rotation.x += 0.005;
+			mesh.rotation.z += 0.01;
+
+			renderer.render( scene, camera );
+
+			requestAnimationFrame( animate );
+		}
+	};
+})();
+</script>
+
+<script>
+// intro
+(function(){
+
+function getHTML(controllersLen){
+	return ''+
+	'<main id="intro" style="text-align:center;color:#FFF;font-size:24px;">'+
+		'<h1>Bad Fruit</h1>'+
+		'<p><span id="introNumOfPlayers">'+controllersLen+'</span> gamepad(s) found.</p>'+
+		'<p class="'+(controllersLen ? 'show' : 'hide')+'" id="introStartShow">Press "Start" button to play.</p>'+
+	'</main>';
+}
+
+document.querySelector('body').insertAdjacentHTML('afterbegin', getHTML(game.controllersArr.length));
+
+window.addEventListener('gamepad-added', introAddGamePadHandler);
+function introAddGamePadHandler(e){
+	var numEl = document.querySelector('#introNumOfPlayers');
+	var len = game.controllersArr.length;
+	if(numEl){
+		numEl.textContent = len;
+	}
+	toggleStartShow(len);
+}
+window.addEventListener('gamepad-disconnect', introDisconnectGamePadHandler);
+function introDisconnectGamePadHandler(e){
+	var numEl = document.querySelector('#introNumOfPlayers');
+	var len = game.controllersArr.length;
+	if(numEl){
+		numEl.textContent = len;
+	}
+	toggleStartShow(len);
+}
+
+function toggleStartShow(len){
+	var el = document.querySelector('#introStartShow');
+	if(len){
+		el.classList.remove('hide');
+		el.classList.add('show');
+	}else{
+		el.classList.remove('show');
+		el.classList.add('hide');
+	}
+}
+
+var keepLooping = true;
+
+getGamepadStatus();
+
+function getGamepadStatus() {
+	var len = game.controllersArr.length;
+	if(len){
+		var controllers = navigator.getGamepads ? navigator.getGamepads() : (navigator.webkitGetGamepads ? navigator.webkitGetGamepads : []);
+		for (var i=0; i<len; i++) {
+			var controller = controllers[i];
+			// TODO: this is controller specific, maybe need to require tap a button three times?
+			if(controller && controller.buttons && controller.buttons[9].pressed){
+				keepLooping = false;
+				var el = document.querySelector('#intro');
+				if(el){
+					el.parentNode.removeChild(el);
+				}
+				window.removeEventListener("gamepad-added", introAddGamePadHandler, false);
+				window.removeEventListener("gamepad-disconnect", introDisconnectGamePadHandler, false);
+				game.init();
+				break;
+			}
+		}
+	}
+
+	if(keepLooping){requestAnimationFrame(getGamepadStatus)};
+}
+
+})();
+</script>
+
+</body>
+</html>
